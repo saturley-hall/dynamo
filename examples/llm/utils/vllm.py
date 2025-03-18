@@ -46,6 +46,12 @@ def parse_vllm_args(service_name, prefix) -> AsyncEngineArgs:
         help="Maximum length of local prefill",
     )
     parser.add_argument(
+        "--max-prefill-queue-size",
+        type=int,
+        default=3,
+        help="Do not send remote prefill requests (prefill locally) if the queue size is greater than this value",
+    )
+    parser.add_argument(
         "--cuda-visible-device-offset",
         type=int,
         default=0,
@@ -59,4 +65,5 @@ def parse_vllm_args(service_name, prefix) -> AsyncEngineArgs:
     engine_args.conditional_disagg = args.conditional_disagg
     engine_args.max_local_prefill_length = args.max_local_prefill_length
     engine_args.cuda_visible_device_offset = args.cuda_visible_device_offset
+    engine_args.max_prefill_queue_size = args.max_prefill_queue_size
     return engine_args
