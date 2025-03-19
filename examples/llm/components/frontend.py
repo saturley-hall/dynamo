@@ -14,18 +14,29 @@
 # limitations under the License.
 
 import subprocess
+from pathlib import Path
 
 from components.processor import Processor
-from components.routerless.worker import VllmWorkerRouterLess
 from components.worker import VllmWorker
 from pydantic import BaseModel
 
+from dynamo import sdk
 from dynamo.sdk import depends, service
 from dynamo.sdk.lib.config import ServiceConfig
+from dynamo.sdk.lib.image import DYNAMO_IMAGE
+
+
+def get_http_binary_path():
+    sdk_path = Path(sdk.__file__)
+    binary_path = sdk_path.parent / "cli/bin/http"
+    if not binary_path.exists():
+        return "http"
+    else:
+        return str(binary_path)
 
 
 class FrontendConfig(BaseModel):
-    model: str
+    served_model_name: str
     endpoint: str
     port: int = 8080
 
@@ -33,11 +44,11 @@ class FrontendConfig(BaseModel):
 @service(
     resources={"cpu": "10", "memory": "20Gi"},
     workers=1,
+    image=DYNAMO_IMAGE,
 )
 # todo this should be called ApiServer
 class Frontend:
     worker = depends(VllmWorker)
-    worker_routerless = depends(VllmWorkerRouterLess)
     processor = depends(Processor)
 
     def __init__(self):
@@ -45,7 +56,13 @@ class Frontend:
         frontend_config = FrontendConfig(**config.get("Frontend", {}))
 
         subprocess.run(
-            ["llmctl", "http", "remove", "chat-models", frontend_config.model]
+            [
+                "llmctl",
+                "http",
+                "remove",
+                "chat-models",
+                frontend_config.served_model_name,
+            ]
         )
         subprocess.run(
             [
@@ -53,11 +70,18 @@ class Frontend:
                 "http",
                 "add",
                 "chat-models",
-                frontend_config.model,
+                frontend_config.served_model_name,
                 frontend_config.endpoint,
             ]
         )
 
-        subprocess.run(
-            ["http", "-p", str(frontend_config.port)], stdout=None, stderr=None
+        print("Starting HTTP server")
+        http_binary = get_http_binary_path()
+        process = subprocess.Popen(
+            [http_binary, "-p", str(frontend_config.port)], stdout=None, stderr=None
         )
+        try:
+            process.wait()
+        except KeyboardInterrupt:
+            process.terminate()
+            process.wait()

@@ -36,8 +36,7 @@ from circus.sockets import CircusSocket
 from circus.watcher import Watcher
 from simple_di import Provide, inject
 
-if t.TYPE_CHECKING:
-    from _bentoml_impl.server.allocator import ResourceAllocator
+from .allocator import ResourceAllocator
 
 
 # Define a Protocol for services to ensure type safety
@@ -188,18 +187,34 @@ def create_dynamo_watcher(
     if worker_envs:
         args.extend(["--worker-env", json.dumps(worker_envs)])
 
-    # Update env to include ServiceConfig
+    # Update env to include ServiceConfig and service-specific environment variables
     worker_env = env.copy() if env else {}
+
+    # Pass through the main service config
     if "DYNAMO_SERVICE_CONFIG" in os.environ:
         worker_env["DYNAMO_SERVICE_CONFIG"] = os.environ["DYNAMO_SERVICE_CONFIG"]
 
-    # Create the watcher with dependency map in environment
+    # Get service-specific environment variables from DYNAMO_SERVICE_ENVS
+    if "DYNAMO_SERVICE_ENVS" in os.environ:
+        try:
+            service_envs = json.loads(os.environ["DYNAMO_SERVICE_ENVS"])
+            if svc.name in service_envs:
+                service_args = service_envs[svc.name].get("ServiceArgs", {})
+                if "envs" in service_args:
+                    worker_env.update(service_args["envs"])
+                    logger.info(
+                        f"Added service-specific environment variables for {svc.name}"
+                    )
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse DYNAMO_SERVICE_ENVS: {e}")
+
+    # Create the watcher with updated environment
     watcher = create_watcher(
         name=f"dynamo_service_{svc.name}",
         args=args,
         numprocesses=num_workers,
         working_dir=working_dir,
-        env=worker_env,  # Use updated environment
+        env=worker_env,
     )
 
     return watcher, socket, uri
@@ -255,7 +270,6 @@ def serve_http(
     threaded: bool = False,
 ) -> Server:
     from _bentoml_impl.loader import import_service, normalize_identifier
-    from _bentoml_impl.server.allocator import ResourceAllocator
     from bentoml._internal.log import SERVER_LOGGING_CONFIG
     from bentoml._internal.utils import reserve_free_port
     from bentoml._internal.utils.analytics.usage_stats import track_serve
@@ -268,6 +282,8 @@ def serve_http(
         make_reload_plugin,
     )
     from circus.sockets import CircusSocket
+
+    from .allocator import ResourceAllocator
 
     bento_id: str = ""
     env = {"PROMETHEUS_MULTIPROC_DIR": ensure_prometheus_dir()}

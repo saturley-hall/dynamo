@@ -5,7 +5,7 @@ Dynamo is a python based SDK for building and deploying distributed inference ap
 ## Installation
 
 ```bash
-pip install ai-dynamo-sdk
+pip install ai-dynamo
 ```
 
 ## Quickstart
@@ -98,8 +98,11 @@ curl -X POST http://localhost:3000/generate \
     -d '{"text": "federer"}'
 ```
 
-You should see the following output:
+You should see the following output
 
 ```bash
 federer-mid-back
 ```
+
+You can find in-depth documentation for the Dynamo SDK [here](./docs/sdk/README.md) and the Dynamo CLI [here](./docs/cli/README.md)
+
