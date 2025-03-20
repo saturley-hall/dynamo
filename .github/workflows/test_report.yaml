@@ -150,6 +150,6 @@ jobs:
         with:
           header: test-report-maro
           number: ${{ github.event.workflow_run.pull_requests[0].number }}
-          hide: true
+          hide_and_recreate: true
           hide_classify: "OUTDATED"
           path: artifacts/vllm-python-test-results/vllm-report.md
