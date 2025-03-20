@@ -134,12 +134,12 @@ jobs:
       - run: ls -al artifacts
       - run: |
             echo "MARKDOWN=$(cat *-report.md )" >> $GITHUB_ENV
-      - id: pr
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          issue=$(gh pr list --search "${{ github.sha }}" --state open --json number --jq ".[0].number")
-          echo "issue=$issue" >>$GITHUB_OUTPUT
+      # - id: pr
+      #   env:
+      #     GH_TOKEN: ${{ github.token }}
+      #   run: |
+      #     issue=$(gh pr list --search "${{ github.sha }}" --state open --json number --jq ".[0].number")
+      #     echo "issue=$issue" >>$GITHUB_OUTPUT
       - name: Post comment
         uses: mshick/add-pr-comment@v2
         with:
