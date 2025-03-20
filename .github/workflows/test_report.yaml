@@ -102,12 +102,18 @@ jobs:
       #     conclusion: ${{ job.status }}
       #     sha: ${{ github.event.workflow_run.head_commit.id }}
 
-      - name: Test Report
-        uses: dorny/test-reporter@v2
-        if: success() || failure()    # run this step even if previous step failed
+      - name: Download and Extract Artifacts
+        uses: dawidd6/action-download-artifact@20319c5641d495c8a52e688b7dc5fada6c3a9fbc # v8
         with:
-          artifact: /(.*)-python-test-results/
-          name: '$1 test results'             # Name of the check run which will be created
-          path: '*.xml'                                                 # Path to test results (inside artifact .zip)
-          reporter: java-junit                                          # Format of test resul
-      - run: echo $GITHUB_STEP_SUMMARY
+           run_id: ${{ github.event.workflow_run.id }}
+           path: artifacts
+      - run: ls -al
+      - run: ls -al artifacts
+      - run: |
+            echo "MARKDOWN=$(cat *-report.md )" >> $GITHUB_ENV
+      - name: Post comment
+        uses: mshick/add-pr-comment@v2
+        with:
+          issue: ${{ github.event.workflow_run.pull_requests.number }}
+          message-path: |
+            vllm-report.md
