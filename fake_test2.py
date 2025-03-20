@@ -11,4 +11,4 @@ def test_failing5():
     assert False
     
 def test_failing6():
-    pass
+    assert False
