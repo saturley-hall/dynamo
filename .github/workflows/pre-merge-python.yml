@@ -49,7 +49,6 @@ jobs:
             ${{ env.PYTEST_XML_FILE }}
             ${{ env.PYTEST_MD_FILE }}
 
-
 #   event_file:
 #     name: "Event File"
 #     runs-on: ubuntu-latest
