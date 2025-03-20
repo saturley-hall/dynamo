@@ -29,10 +29,12 @@ jobs:
     name: Build and Test - ${{ matrix.framework }}
     env:
       CONTAINER_ID: test_${{ github.run_id }}_${{ github.run_attempt }}_${{ github.job }}_${{ matrix.framework }}
-      PYTEST_XML_FILE: pytest_test_report.xml
+      PYTEST_MD_FILE: ${{ matrix.framework }}-report.md 
+      PYTEST_XML_FILE: ${{ matrix.framework }}-report.xml
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+      - run: pytest --md-report --md-report-verbose=1 --md-report-flavor gfm --md-report-output ${{ env.PYTEST_MD_FILE }} --junitxml=${{ env.PYTEST_XML_FILE }} fake_test.py 
       - name: Archive test report
         uses: actions/upload-artifact@v4
         if: always()
@@ -41,6 +43,7 @@ jobs:
           if-no-files-found: error
           path: |
             ${{ env.PYTEST_XML_FILE }}
+            ${{ env.PYTEST_MD_FILE }}
 
 
 #   event_file:
