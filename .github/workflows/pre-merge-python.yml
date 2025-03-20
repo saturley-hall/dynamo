@@ -16,9 +16,6 @@
 name: NVIDIA Test Github Validation
 
 on:
-  push:
-    branches:
-    - main
   pull_request:
 
 jobs:
