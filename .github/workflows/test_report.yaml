@@ -24,10 +24,6 @@ jobs:
     name: Test Results
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion != 'skipped'
-    strategy:
-      matrix:
-        framework:
-          - vllm
 
     permissions:
       checks: write
@@ -110,7 +106,8 @@ jobs:
         uses: dorny/test-reporter@v2
         if: success() || failure()    # run this step even if previous step failed
         with:
-          artifact: ${{ matrix.framework }}-python-test-results         # artifact name
-          name: ${{ matrix.framework }} Python test results             # Name of the check run which will be created
+          artifact: '/(.*)-python-test-results/  '
+          name: $1 test results             # Name of the check run which will be created
           path: '*.xml'                                                 # Path to test results (inside artifact .zip)
           reporter: java-junit                                          # Format of test resul
+      - run: echo $GITHUB_STEP_SUMMARY
