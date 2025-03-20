@@ -36,7 +36,7 @@ jobs:
         uses: actions/checkout@v4
       - run: |
             pip install -r container/deps/requirements.test.txt
-            pytest --md-report --md-report-verbose=1 --md-report-flavor gfm --md-report-output ${{ env.PYTEST_MD_FILE }} -md-report-exclude-outcomes passed skipped xpassed --junitxml=${{ env.PYTEST_XML_FILE }} fake_test.py
+            pytest -v --md-report --md-report-flavor gfm --md-report-exclude-outcomes passed skipped xpassed --md-report-output ${{ env.PYTEST_MD_FILE }} --junitxml=${{ env.PYTEST_XML_FILE }} fake_test*.py
       - run: ls -al
         if: always()
       - name: Archive test report
