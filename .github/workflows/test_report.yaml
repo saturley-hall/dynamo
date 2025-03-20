@@ -101,7 +101,30 @@ jobs:
       #     status: "completed"
       #     conclusion: ${{ job.status }}
       #     sha: ${{ github.event.workflow_run.head_commit.id }}
-
+      - name: Dump GitHub context
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+        run: echo "$GITHUB_CONTEXT"
+      - name: Dump job context
+        env:
+          JOB_CONTEXT: ${{ toJson(job) }}
+        run: echo "$JOB_CONTEXT"
+      - name: Dump steps context
+        env:
+          STEPS_CONTEXT: ${{ toJson(steps) }}
+        run: echo "$STEPS_CONTEXT"
+      - name: Dump runner context
+        env:
+          RUNNER_CONTEXT: ${{ toJson(runner) }}
+        run: echo "$RUNNER_CONTEXT"
+      - name: Dump strategy context
+        env:
+          STRATEGY_CONTEXT: ${{ toJson(strategy) }}
+        run: echo "$STRATEGY_CONTEXT"
+      - name: Dump matrix context
+        env:
+          MATRIX_CONTEXT: ${{ toJson(matrix) }}
+        run: echo "$MATRIX_CONTEXT"
       - name: Download and Extract Artifacts
         uses: dawidd6/action-download-artifact@20319c5641d495c8a52e688b7dc5fada6c3a9fbc # v8
         with:
@@ -111,9 +134,13 @@ jobs:
       - run: ls -al artifacts
       - run: |
             echo "MARKDOWN=$(cat *-report.md )" >> $GITHUB_ENV
+      - id: pr
+        run: |
+          issue=$(gh pr list --search "${{ github.sha }}" --state open --json number --jq ".[0].number")
+          echo "issue=$issue" >>$GITHUB_OUTPUT
       - name: Post comment
         uses: mshick/add-pr-comment@v2
         with:
-          issue: ${{ github.event.workflow_run.pull_requests.number }}
+          issue: ${{ steps.pr.outputs.issue }}
           message-path: |
             vllm-report.md
