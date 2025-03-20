@@ -135,12 +135,15 @@ jobs:
       - run: |
             echo "MARKDOWN=$(cat *-report.md )" >> $GITHUB_ENV
       - id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           issue=$(gh pr list --search "${{ github.sha }}" --state open --json number --jq ".[0].number")
           echo "issue=$issue" >>$GITHUB_OUTPUT
       - name: Post comment
         uses: mshick/add-pr-comment@v2
         with:
-          issue: ${{ steps.pr.outputs.issue }}
+          # issue: ${{ steps.pr.outputs.issue }}
+          issue: ${{ github.event.workflow_run.pull_requests[0].number }}
           message-path: |
             vllm-report.md
