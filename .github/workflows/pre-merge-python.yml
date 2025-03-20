@@ -34,7 +34,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - run: pytest --md-report --md-report-verbose=1 --md-report-flavor gfm --md-report-output ${{ env.PYTEST_MD_FILE }} --junitxml=${{ env.PYTEST_XML_FILE }} fake_test.py 
+      - run: pytest --md-report --md-report-verbose=1 --md-report-flavor gfm --md-report-output ${{ env.PYTEST_MD_FILE }} --junitxml=${{ env.PYTEST_XML_FILE }} fake_test.py
+      - run: ls -al
       - name: Archive test report
         uses: actions/upload-artifact@v4
         if: always()
