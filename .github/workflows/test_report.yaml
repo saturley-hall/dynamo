@@ -48,7 +48,7 @@ jobs:
           recreate: true
           path: artifacts/vllm-python-test-results/vllm-report.md
       - name: Comment no test failures
-        if: ${{ steps.comment_pr_failures.outcome }} == 'failure'
+        if: failure() && steps.comment_pr_failures.outcome == 'failure'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: test-report-maro
