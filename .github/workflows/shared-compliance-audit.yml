@@ -143,22 +143,24 @@ jobs:
             --exclude './proc/**' --exclude './sys/**' --exclude './dev/**' \
             --exclude './__w/**' --exclude './__e/**' --exclude './github/**' \
             --exclude './tmp/**' --exclude './run/**' --exclude './home/runner/**' \
-            -o cyclonedx-json=/tmp/syft.cdx.json
-          # Compare the full current inventory, never a diff, historical
-          # baseline, or another architecture's inventory.
-          OUR_CSV=$(find /tmp/compliance -path '*linux_amd64/*' \
-            -name 'osrb-*.csv' ! -name '*.diff.csv' ! -path '*/baseline/*' -print -quit)
-          [ -z "${OUR_CSV}" ] && OUR_CSV=$(find /tmp/compliance -maxdepth 1 \
-            -name 'osrb-*.csv' ! -name '*.diff.csv' -print -quit)
-          if [ -z "${OUR_CSV}" ]; then
-            echo "::error::No current amd64 OSRB inventory found"
+            -o cyclonedx-json=/tmp/syft.cdx.json -o syft-json=/tmp/syft.json
+          # Require one full inventory for this build and architecture.
+          # Historical baseline and diff CSVs must never substitute for it.
+          shopt -s nullglob
+          csvs=(/tmp/compliance/linux_amd64/osrb-*-"${GITHUB_SHA:0:8}".csv)
+          if [ "${#csvs[@]}" -eq 0 ]; then
+            csvs=(/tmp/compliance/osrb-*-"${GITHUB_SHA:0:8}".csv)
+          fi
+          if [ "${#csvs[@]}" -ne 1 ]; then
+            echo "::error::Expected one current amd64 OSRB inventory; found ${#csvs[@]}"
             exit 1
           fi
+          OUR_CSV="${csvs[0]}"
           echo "auditing against ${OUR_CSV}"
           BASE_ARG=""
           [ -n "${{ steps.resolve.outputs.baseline }}" ] && BASE_ARG="--base-sbom ${{ steps.resolve.outputs.baseline }}"
           PYTHONPATH=container python3 -m compliance.audit_image_sbom \
-            --syft-sbom /tmp/syft.cdx.json \
+            --syft-sbom /tmp/syft.cdx.json --syft-json /tmp/syft.json \
             ${BASE_ARG} \
             --our-csv "${OUR_CSV}" \
             --image "${{ steps.resolve.outputs.image_tag }}" \
@@ -169,6 +171,9 @@ jobs:
         with:
           # compliance-audit-<git-sha>-<container>[-cudaN] (image_tag already carries all three).
           name: compliance-audit-${{ steps.resolve.outputs.image_tag }}
-          path: /tmp/audit-report.txt
+          path: |
+            /tmp/audit-report.txt
+            /tmp/syft.cdx.json
+            /tmp/syft.json
           retention-days: 7
           if-no-files-found: ignore
