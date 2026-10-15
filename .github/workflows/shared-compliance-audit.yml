@@ -6,9 +6,8 @@
 # build's unified osrb-deps.csv — the authoritative "did the generators miss
 # anything" check that verify_sbom_diff never was (it only compared our own
 # outputs). Runs as a sibling job (needs:[<fw>-build]) IN PARALLEL with the test
-# jobs so the slow syft pull+scan never blocks testing. SOFT GATE: report-only
-# (no --fail-on-findings) until the name-normalization is proven low-noise; the
-# job is not a required check.
+# jobs so the slow syft pull+scan never blocks testing. Scanner failures and
+# missing attribution fail the audit; backend-status-check requires its result.
 name: Shared Compliance Audit
 
 on:
@@ -74,11 +73,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Install syft
-        # Best-effort: the audit is a soft gate, so never hard-fail the job on a
-        # syft install hiccup — the scan step below is also continue-on-error.
-        continue-on-error: true
         shell: bash
         run: |
+          set -euo pipefail
           # Install into a runner-writable dir and put it on PATH (no sudo).
           # curl||wget — the shipped image normally has curl, but fall back so a
           # missing one doesn't silently no-op the audit.
@@ -125,7 +122,6 @@ jobs:
           name: ${{ steps.resolve.outputs.artifact }}
           path: /tmp/compliance
       - name: Syft scan (container fs) + audit vs osrb-deps.csv
-        continue-on-error: true   # soft gate — never block tests/merge
         shell: bash
         run: |
           set -euo pipefail
@@ -148,8 +144,16 @@ jobs:
             --exclude './__w/**' --exclude './__e/**' --exclude './github/**' \
             --exclude './tmp/**' --exclude './run/**' --exclude './home/runner/**' \
             -o cyclonedx-json=/tmp/syft.cdx.json
-          OUR_CSV=$(find /tmp/compliance -path '*linux_amd64*' -name 'osrb-*.csv' | head -1)
-          [ -z "${OUR_CSV}" ] && OUR_CSV=$(find /tmp/compliance -name 'osrb-*.csv' | head -1)
+          # Compare the full current inventory, never a diff, historical
+          # baseline, or another architecture's inventory.
+          OUR_CSV=$(find /tmp/compliance -path '*linux_amd64/*' \
+            -name 'osrb-*.csv' ! -name '*.diff.csv' ! -path '*/baseline/*' -print -quit)
+          [ -z "${OUR_CSV}" ] && OUR_CSV=$(find /tmp/compliance -maxdepth 1 \
+            -name 'osrb-*.csv' ! -name '*.diff.csv' -print -quit)
+          if [ -z "${OUR_CSV}" ]; then
+            echo "::error::No current amd64 OSRB inventory found"
+            exit 1
+          fi
           echo "auditing against ${OUR_CSV}"
           BASE_ARG=""
           [ -n "${{ steps.resolve.outputs.baseline }}" ] && BASE_ARG="--base-sbom ${{ steps.resolve.outputs.baseline }}"
@@ -158,7 +162,7 @@ jobs:
             ${BASE_ARG} \
             --our-csv "${OUR_CSV}" \
             --image "${{ steps.resolve.outputs.image_tag }}" \
-            --report /tmp/audit-report.txt -v
+            --report /tmp/audit-report.txt --fail-on-findings -v
       - name: Upload audit report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
