@@ -80,11 +80,11 @@ jobs:
           # curl||wget — the shipped image normally has curl, but fall back so a
           # missing one doesn't silently no-op the audit.
           mkdir -p "${RUNNER_TEMP}/bin"
-          INSTALL_URL=https://raw.githubusercontent.com/anchore/syft/main/install.sh
+          INSTALL_URL=https://raw.githubusercontent.com/anchore/syft/v1.54.1/install.sh
           if command -v curl >/dev/null 2>&1; then
-            curl -sSfL "${INSTALL_URL}" | sh -s -- -b "${RUNNER_TEMP}/bin"
+            curl -sSfL "${INSTALL_URL}" | sh -s -- -b "${RUNNER_TEMP}/bin" v1.54.1
           else
-            wget -qO- "${INSTALL_URL}" | sh -s -- -b "${RUNNER_TEMP}/bin"
+            wget -qO- "${INSTALL_URL}" | sh -s -- -b "${RUNNER_TEMP}/bin" v1.54.1
           fi
           echo "${RUNNER_TEMP}/bin" >> "$GITHUB_PATH"
       - name: Resolve image ref, baseline + artifact name

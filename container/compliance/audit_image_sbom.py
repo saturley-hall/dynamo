@@ -18,13 +18,12 @@ Inputs:
   --image        image ref/label, for the report header (optional)
   --report       optional path to write the unattributed list (one per line)
   --fail-on-findings  exit non-zero if any unattributed component is found
-                      (default: report-only / exit 0 — the audit job is a
-                      non-blocking soft gate until the name-normalization is
-                      proven low-noise)
+                      (default: report-only / exit 0 for local investigations;
+                      CI passes --fail-on-findings)
 
-Name matching is NORMALIZED and version-agnostic to avoid false alarms from
-packaging-name skew (dist vs import name, '_' vs '-', purl qualifiers): a syft
-component is considered attributed if a normalized name match exists in our CSV.
+Name matching is ecosystem-scoped and version-agnostic. Python names use
+PEP 503 normalization; other ecosystems retain their package names. Generic
+binary identities must have native rows, not an unrelated Rust/Python name.
 """
 
 from __future__ import annotations
@@ -37,6 +36,8 @@ import os
 import sys
 from pathlib import Path
 from posixpath import normpath
+
+from .identity import component_identity, identity
 
 logger = logging.getLogger("compliance.audit_image_sbom")
 
@@ -69,6 +70,15 @@ def _csv_names(csv_path: Path) -> set[str]:
             if row.get("name"):
                 names.add(_normalize(row["name"]))
     return names
+
+
+def _csv_identities(csv_path: Path) -> set[tuple[str, str]]:
+    with csv_path.open(newline="", encoding="utf-8") as stream:
+        return {
+            identity(row.get("ecosystem", "native"), row["name"])
+            for row in csv.DictReader(stream)
+            if row.get("name")
+        }
 
 
 def _purl_type(purl: str | None) -> str:
@@ -166,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     our_names = _csv_names(args.our_csv)
+    our_identities = _csv_identities(args.our_csv)
     owners = (
         _ownership_coverage(json.loads(args.syft_json.read_text()), our_names)
         if args.syft_json
@@ -185,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         if (name, str(version)) in baseline_keys:
             continue
         delta += 1
-        if _normalize(name) not in our_names and not _is_first_party(name):
+        if component_identity(c) not in our_identities and not _is_first_party(name):
             if _covered_by_owner(c, owners):
                 owner_matched += 1
                 continue
