@@ -456,6 +456,14 @@ def supplement(
                 "artifact_id": artifact["id"],
                 "cataloger": artifact["foundBy"],
                 "locations": artifact.get("locations", []),
+                "owning_packages": [
+                    {key: owner.get(key) for key in ("id", "name", "version", "purl")}
+                    for owner in {
+                        owner["id"]: owner
+                        for location in artifact.get("locations", [])
+                        for owner in owners.get(_path(location["path"]), [])
+                    }.values()
+                ],
                 "source_sha256": checksum,
                 "license_evidence": evidence,
             }

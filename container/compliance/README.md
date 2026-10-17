@@ -175,7 +175,12 @@ across the merged above-baseline inventory, including licenses the policy allows
 An allowed MPL-2.0 dependency remains non-permissive; policy acceptance is not a
 claim that source and notice obligations disappear. SPDX `OR` alternatives stay
 intact for review. The existing policy gate still rejects denied or unknown
-licenses, and this collection path adds no policy exceptions.
+licenses. A component-specific exception permits the native CBC executable under
+EPL-1.0 because it is distributed as a separate program. It does not permit EPL
+for other components, the unrelated Rust `cbc` crate, or an unknown solver license.
+The solver's own notice and provenance remain required, and its EPL license stays
+visible in the license-review artifact. This exception records the distribution
+rationale, not a claim of independent legal sign-off.
 
 Crate sources whose expressions are not wholly recognized as permissive, and Go
 module sources with such expressions, are retained under

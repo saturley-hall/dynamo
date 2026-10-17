@@ -142,7 +142,7 @@ def test_parent_package_does_not_cover_unknown_binary_or_other_ecosystem(tmp_pat
     assert binary.ecosystem == "native" and binary.spdx == "UNKNOWN"
 
 
-def test_solver_uses_own_license_and_remains_denied(tmp_path):
+def test_solver_uses_own_license_with_scoped_exception(tmp_path):
     path = "pulp/solverdir/cbc/win/i64/cbc.exe"
     license_path = tmp_path / "site" / Path(path).parent / "coin-license.txt"
     license_path.parent.mkdir(parents=True)
@@ -153,7 +153,13 @@ def test_solver_uses_own_license_and_remains_denied(tmp_path):
     )
     assert spdx == "EPL-1.0" and "Actual solver license" in text
     policy = load_policy(Path(__file__).resolve().parents[1] / "policy/licenses.toml")
-    assert validate_row(policy, "native", "cbc", "UNKNOWN", spdx) is not None
+    assert validate_row(policy, "native", "cbc", "UNKNOWN", spdx) is None
+    assert (
+        validate_row(policy, "native", "unreviewed-solver", "UNKNOWN", spdx) is not None
+    )
+    assert validate_row(policy, "rust", "cbc", "0.1.2", spdx) is not None
+    assert validate_row(policy, "native", "cbc", "UNKNOWN", "EPL-2.0") is not None
+    assert validate_row(policy, "native", "cbc", "UNKNOWN", "UNKNOWN") is not None
     assert "coin-or" in source
 
 
@@ -291,7 +297,8 @@ def test_license_review_distinguishes_allowed_from_permissive(tmp_path):
     }
     assert records["copyleft"]["review_terms"] == ["MPL-2.0"]
     assert records["copyleft"]["policy_violation"] is None
-    assert records["cbc"]["policy_violation"] is not None
+    assert records["cbc"]["policy_violation"] is None
+    assert records["cbc"]["review_terms"] == ["EPL-1.0"]
     assert "permissive" not in records
 
 
@@ -346,7 +353,7 @@ def test_local_source_project_owner_cannot_cover_registry_dependencies(
     assert result["dependency"].spdx == "EPL-1.0"
 
 
-def test_cli_merges_supplement_and_retains_required_license_failure(tmp_path):
+def test_cli_merges_supplement_and_reports_scoped_license_exception(tmp_path):
     site = tmp_path / "site"
     dist = site / "pulp-3.3.2.dist-info"
     dist.mkdir(parents=True)
@@ -395,7 +402,10 @@ def test_cli_merges_supplement_and_retains_required_license_failure(tmp_path):
     assert "solver copyright" in (output / "NOTICES-Native.txt").read_text()
     assert "cbc" in (output / "osrb-deps.csv").read_text()
     review = json.loads((output / "license-review.json").read_text())
-    assert next(c for c in review if c["name"] == "cbc")["policy_violation"]
+    cbc = next(c for c in review if c["name"] == "cbc")
+    assert cbc["policy_violation"] is None
+    assert cbc["review_terms"] == ["EPL-1.0"]
+    assert "Mere aggregation" in (output / "osrb-deps.csv").read_text()
 
 
 @pytest.mark.parametrize(
