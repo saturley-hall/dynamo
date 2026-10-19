@@ -462,3 +462,142 @@ def test_local_crate_without_purl_keeps_rust_ecosystem():
             "properties": [{"name": "syft:package:type", "value": "rust-crate"}],
         }
     ) == ("rust", "flaxlib")
+
+
+@pytest.mark.parametrize(
+    "name,declaration,expected",
+    [
+        ("demo", 'license = "MIT/Apache-2.0"', "MIT OR Apache-2.0"),
+        ("demo", 'license = "Apache-2.0/MIT"', "Apache-2.0 OR MIT"),
+        ("jsonpath-rust", 'license-file = "LICENSE"', "MIT"),
+        ("scoped-env", 'license-file = "LICENSE"', "MIT"),
+        ("unreviewed", 'license-file = "LICENSE"', "UNKNOWN"),
+    ],
+)
+def test_registry_license_resolution_uses_cargo_syntax_and_reviewed_overrides(
+    tmp_path, name, declaration, expected
+):
+    body = io.BytesIO()
+    with tarfile.open(fileobj=body, mode="w:gz") as archive:
+        for filename, text in [
+            (
+                "Cargo.toml",
+                f'[package]\nname = "{name}"\nversion = "1.0"\n{declaration}\n',
+            ),
+            ("LICENSE", "Upstream license-file notice"),
+        ]:
+            payload = text.encode()
+            entry = tarfile.TarInfo(f"{name}-1.0/{filename}")
+            entry.size = len(payload)
+            archive.addfile(entry, io.BytesIO(payload))
+    payload = body.getvalue()
+    (tmp_path / f"{name}@1.0.crate").write_bytes(payload)
+    (tmp_path / f"{name}@1.0.json").write_text(
+        json.dumps({"vers": "1.0", "cksum": hashlib.sha256(payload).hexdigest()})
+    )
+    spdx, text, _, _ = shipped._crate(name, "1.0", tmp_path)
+    assert spdx == expected
+    assert "Upstream license-file notice" in text
+
+
+def test_embedded_go_main_uses_installed_wheel_metadata(tmp_path):
+    directory = tmp_path / "site/mooncake-1.0.dist-info"
+    directory.mkdir(parents=True)
+    (directory / "METADATA").write_text(
+        "Name: mooncake-transfer-engine-cuda13\nVersion: 1.0\n"
+    )
+    (directory / "LICENSE").write_text("Actual upstream notice")
+    wheel = owner("mooncake/libetcd_wrapper.so", "mooncake-transfer-engine-cuda13")
+    wheel["licenses"] = []  # Syft did not resolve the wheel license.
+    wheel["locations"] = [{"path": "site/mooncake-1.0.dist-info/METADATA"}]
+    item = artifact(
+        "command-line-arguments", "go-module", "site/mooncake/libetcd_wrapper.so"
+    )
+    expr, text, _ = shipped._owning_project(item, shipped._owners([wheel]), tmp_path)
+    assert expr == "Apache-2.0"
+    assert text == "Actual upstream notice"
+    # A different path cannot borrow the same wheel's license.
+    item["locations"] = [{"path": "site/unrelated.so"}]
+    assert (
+        shipped._owning_project(item, shipped._owners([wheel]), tmp_path)[0]
+        == "UNKNOWN"
+    )
+
+
+def test_local_flax_crate_uses_its_reviewed_license(tmp_path):
+    directory = tmp_path / "site/flaxlib"
+    directory.mkdir(parents=True)
+    (directory / "Cargo.lock").write_text("")
+    (directory / "Cargo.toml").write_text(
+        '[package]\nname = "flaxlib"\nversion = "0.0.1-a1"\n'
+    )
+    (directory / "LICENSE").write_text("Flaxlib upstream Apache notice")
+    item = artifact("flaxlib", "rust-crate", "site/flaxlib/Cargo.lock", "0.0.1-a1")
+    result = shipped.supplement(
+        {"artifacts": [item]},
+        [],
+        tmp_path,
+        tmp_path / "cache",
+        set(),
+        tmp_path / "legal",
+    )
+    assert result[0].spdx == "Apache-2.0"
+    assert result[0].license_text == "Flaxlib upstream Apache notice"
+
+
+@pytest.mark.parametrize(
+    "metadata_name", ["system.egg-info/PKG-INFO", "system.egg-info"]
+)
+def test_system_python_uses_installed_metadata(tmp_path, metadata_name):
+    metadata = tmp_path / "usr/lib/python3/dist-packages" / metadata_name
+    metadata.parent.mkdir(parents=True)
+    metadata.write_text(
+        "Name: system\nVersion: 1.0\n"
+        "Classifier: License :: OSI Approved :: MIT License\n"
+    )
+    item = artifact("system", "python", str(metadata.relative_to(tmp_path)))
+    assert shipped._python_metadata(item, tmp_path)[0] == "MIT"
+
+
+def test_system_python_requires_exact_unique_dpkg_owner(tmp_path):
+    path = "usr/lib/python3/dist-packages/system.egg-info/PKG-INFO"
+    item = artifact("system", "python", path)
+    item["locations"][0]["annotations"] = {"evidence": "primary"}
+    package = artifact("python3-system", "deb", "var/lib/dpkg/status")
+    package["metadata"] = {"files": [{"path": "/" + path}]}
+    notice = tmp_path / "usr/share/doc/python3-system/copyright"
+    notice.parent.mkdir(parents=True)
+    notice.write_text(
+        "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/\n\nFiles: *\nCopyright: Upstream\nLicense: LGPL-3+\n"
+    )
+    spdx, text, _ = shipped._system_python(item, [package], tmp_path)
+    assert spdx == "LGPL-3.0-or-later"
+    assert "Copyright: Upstream" in text
+    assert shipped._system_python(item, [], tmp_path)[0] == "UNKNOWN"
+    assert (
+        shipped._system_python(item, [package, dict(package, name="other")], tmp_path)[
+            0
+        ]
+        == "UNKNOWN"
+    )
+
+
+def test_system_python_policy_exceptions_stay_package_scoped(tmp_path):
+    policy = load_policy(Path(__file__).resolve().parents[1] / "policy/licenses.toml")
+    for name, expression in [
+        ("python-apt", "GPL-2.0-or-later"),
+        ("pygobject", "LGPL-2.1-or-later"),
+    ]:
+        assert validate_row(policy, "python", name, "1.0", expression) is None
+        assert (
+            validate_row(policy, "python", "unreviewed", "1.0", expression) is not None
+        )
+    components = [Component("python", "python-apt", "1.0", "GPL-2.0-or-later")]
+    shipped.write_license_review(
+        components,
+        Path(__file__).resolve().parents[1] / "policy/licenses.toml",
+        tmp_path,
+    )
+    assert json.loads((tmp_path / "license-review.json").read_text())[0][
+        "review_terms"
+    ] == ["GPL-2.0-or-later"]

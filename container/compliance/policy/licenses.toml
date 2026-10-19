@@ -2831,3 +2831,18 @@ type = "native"
 name = "cbc"
 allow = ["EPL-1.0"]
 reason = "Mere aggregation: PuLP bundles CBC as a standalone solver executable, not code linked into Dynamo's Apache-2.0 libraries. The solver's own coin-license.txt is reproduced in NOTICES-Native.txt, and shipped-provenance.json records the owning wheel and file locations. CBC source is published at https://github.com/coin-or/Cbc; redistribution retains EPL source-availability and notice obligations. This exception does not allow EPL generally or apply to the Rust cbc crate."
+
+# Python-cataloger identities for the same system libraries already covered by
+# the python3-apt/python3-gi dpkg exceptions above. Keep GPL/LGPL visible in
+# license-review.json; this does not permit these licenses for other packages.
+[[exceptions]]
+type = "python"
+name = "python-apt"
+allow = ["GPL-2.0-only", "GPL-2.0-or-later"]
+reason = "Same system python3-apt component as the existing dpkg exception; separately cataloged Python identity, mere aggregation."
+
+[[exceptions]]
+type = "python"
+name = "pygobject"
+allow = ["LGPL-2.0-only", "LGPL-2.1-or-later"]
+reason = "Same system python3-gi component as the existing dpkg exception; separately cataloged Python identity, mere aggregation."

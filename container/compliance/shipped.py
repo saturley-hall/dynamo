@@ -24,6 +24,7 @@ from posixpath import normpath
 
 from . import overrides
 from .generators import common
+from .generators import dpkg as dpkg_generator
 from .generators import python as python_generator
 from .identity import ARTIFACT_ECOSYSTEMS, identity
 from .policy.validate import load_policy, validate_row
@@ -136,7 +137,16 @@ def _crate(name: str, version: str, cache: Path) -> tuple[str, str, str, str]:
             if notice is not None:
                 with notice:
                     text += "\n\n" + notice.read().decode("utf-8", errors="replace")
-    return package.get("license") or common.UNKNOWN, text, url, checksum
+    spdx = (
+        overrides.lookup("rust", name, version)
+        or package.get("license")
+        or common.UNKNOWN
+    )
+    # Cargo historically accepted slash-separated alternatives. Normalize only
+    # that legacy form at the Cargo boundary, never in the SPDX policy parser.
+    if re.fullmatch(r"[A-Za-z0-9.+-]+(?:/[A-Za-z0-9.+-]+)+", spdx):
+        spdx = spdx.replace("/", " OR ")
+    return spdx, text, url, checksum
 
 
 def _licenses(artifact: dict) -> tuple[str, str]:
@@ -225,7 +235,7 @@ def _owners(artifacts: list[dict]) -> dict[str, list[dict]]:
 
 
 def _owning_project(
-    artifact: dict, owners: dict[str, list[dict]]
+    artifact: dict, owners: dict[str, list[dict]], root: Path
 ) -> tuple[str, str, str]:
     """License a synthetic/local project from its exact recorded wheel owner.
 
@@ -239,8 +249,71 @@ def _owning_project(
     if len({items[0]["id"] for items in owning}) != 1:
         return common.UNKNOWN, "", ""
     owner = owning[0][0]
-    expr, text = _licenses(owner)
-    return expr, text, owner.get("purl", "")
+    expr, text, source = _python_metadata(owner, root)
+    return expr, text, source
+
+
+def _python_metadata(artifact: dict, root: Path) -> tuple[str, str, str]:
+    """Use installed metadata and the same resolver as the wheel inventory."""
+    for location in artifact.get("locations", []):
+        path = root / _path(location["path"]).lstrip("/")
+        if path.is_dir() and path.name.endswith(".egg-info"):
+            path = path / "PKG-INFO"
+        if path.name not in {"METADATA", "PKG-INFO"} and not path.name.endswith(
+            ".egg-info"
+        ):
+            continue
+        if not path.is_file():
+            continue
+        (
+            name,
+            version,
+            expr,
+            free,
+            classifiers,
+        ) = python_generator._extract_metadata_field(path.read_text(errors="replace"))
+        if (
+            identity("python", name or "") != identity("python", artifact["name"])
+            or version != artifact["version"]
+        ):
+            raise ValueError(f"installed Python metadata mismatch: {path}")
+        spdx = python_generator._resolve_spdx(name, version, expr, free, classifiers)
+        text = python_generator._read_license_text(path.parent) or ""
+        return spdx, text, artifact.get("purl", "")
+    spdx, text = _licenses(artifact)
+    return spdx, text, artifact.get("purl", "")
+
+
+def _system_python(
+    artifact: dict, artifacts: list[dict], root: Path
+) -> tuple[str, str, str]:
+    """Resolve unknown system distributions from their exact dpkg file owner."""
+    paths = {
+        _path(loc["path"])
+        for loc in artifact.get("locations", [])
+        if loc.get("annotations", {}).get("evidence") == "primary"
+    }
+    if not paths:
+        return common.UNKNOWN, "", ""
+    owners = []
+    for package in artifacts:
+        if package["type"] != "deb":
+            continue
+        files = {
+            _path(entry["path"])
+            for entry in package.get("metadata", {}).get("files", [])
+        }
+        if paths <= files:
+            owners.append(package)
+    if len(owners) != 1:
+        return common.UNKNOWN, "", ""
+    package = owners[0]
+    spdx = dpkg_generator._resolve_license(package["name"], package["version"], root)
+    copyright_path = root / "usr/share/doc" / package["name"] / "copyright"
+    text = (
+        copyright_path.read_text(errors="replace") if copyright_path.is_file() else ""
+    )
+    return spdx, text, package.get("purl", "")
 
 
 def _resource(
@@ -382,7 +455,15 @@ def supplement(
                     and not text
                     and not artifact.get("metadata", {}).get("source")
                 ):
-                    spdx, text, source = _owning_project(artifact, owners)
+                    spdx, text, source = _owning_project(artifact, owners, root)
+        elif (
+            artifact["type"] == "python"
+            and name != "my-test-package"
+            and spdx == common.UNKNOWN
+        ):
+            spdx, text, source = _python_metadata(artifact, root)
+            if spdx == common.UNKNOWN:
+                spdx, text, source = _system_python(artifact, artifacts, root)
         elif artifact["type"] not in _TYPES or name == "my-test-package":
             spdx, text, source = _resource(artifact, owners, root)
         elif (
@@ -413,7 +494,7 @@ def supplement(
         elif artifact["type"] == "go-module" and name == "command-line-arguments":
             # Go's synthetic main package belongs to the wheel that compiled it;
             # all independently named module dependencies remain separate rows.
-            spdx, text, source = _owning_project(artifact, owners)
+            spdx, text, source = _owning_project(artifact, owners, root)
         if (
             artifact["type"] == "go-module"
             and spdx != common.UNKNOWN
