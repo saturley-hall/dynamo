@@ -528,7 +528,7 @@ def test_embedded_go_main_uses_installed_wheel_metadata(tmp_path):
     "name,version,expected",
     [
         ("flaxlib", "0.0.1-a1", "Apache-2.0"),
-        ("ittapi-integration-test", "0.1.0", "GPL-2.0-only OR BSD-3-Clause"),
+        ("ittapi-integration-test", "0.1.0", "BSD-3-Clause"),
     ],
 )
 def test_local_crate_uses_its_reviewed_license(tmp_path, name, version, expected):
