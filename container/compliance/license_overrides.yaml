@@ -1056,3 +1056,6 @@ overrides:
   - { ecosystem: rust, name: scoped-env, license: "MIT", source: "https://static.crates.io/crates/scoped-env/scoped-env-2.1.0.crate (LICENSE)" }
   # The flax 0.10.0 wheel ships this local Cargo project and its Apache text.
   - { ecosystem: rust, name: flaxlib, license: "Apache-2.0", source: "https://pypi.org/project/flax/0.10.0/ (wheel flaxlib/LICENSE)" }
+  # Unpublished local integration-test crate shipped in PyTorch's ittapi tree.
+  # Upstream README applies the project dual license to this source project.
+  - { ecosystem: rust, name: ittapi-integration-test, license: "GPL-2.0-only OR BSD-3-Clause", source: "https://github.com/intel/ittapi/blob/54835bb96f1b85f8f21841ce821487f69d95ecce/README.md#license (rust/integration-tests/Cargo.toml declares publish=false and no license)" }

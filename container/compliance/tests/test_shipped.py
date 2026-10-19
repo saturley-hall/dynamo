@@ -524,15 +524,22 @@ def test_embedded_go_main_uses_installed_wheel_metadata(tmp_path):
     )
 
 
-def test_local_flax_crate_uses_its_reviewed_license(tmp_path):
-    directory = tmp_path / "site/flaxlib"
+@pytest.mark.parametrize(
+    "name,version,expected",
+    [
+        ("flaxlib", "0.0.1-a1", "Apache-2.0"),
+        ("ittapi-integration-test", "0.1.0", "GPL-2.0-only OR BSD-3-Clause"),
+    ],
+)
+def test_local_crate_uses_its_reviewed_license(tmp_path, name, version, expected):
+    directory = tmp_path / "site" / name
     directory.mkdir(parents=True)
     (directory / "Cargo.lock").write_text("")
     (directory / "Cargo.toml").write_text(
-        '[package]\nname = "flaxlib"\nversion = "0.0.1-a1"\n'
+        f'[package]\nname = "{name}"\nversion = "{version}"\n'
     )
     (directory / "LICENSE").write_text("Flaxlib upstream Apache notice")
-    item = artifact("flaxlib", "rust-crate", "site/flaxlib/Cargo.lock", "0.0.1-a1")
+    item = artifact(name, "rust-crate", f"site/{name}/Cargo.lock", version)
     result = shipped.supplement(
         {"artifacts": [item]},
         [],
@@ -541,7 +548,7 @@ def test_local_flax_crate_uses_its_reviewed_license(tmp_path):
         set(),
         tmp_path / "legal",
     )
-    assert result[0].spdx == "Apache-2.0"
+    assert result[0].spdx == expected
     assert result[0].license_text == "Flaxlib upstream Apache notice"
 
 
